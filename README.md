@@ -1,4 +1,5 @@
 # REFrameworkUpdater
+PowerShell script for updating DLLs from [@praydog's REFramework](https://github.com/praydog/REFramework) nightly builds
 
 ![Preview](https://user-images.githubusercontent.com/4276174/227882218-18a3e9ed-c030-4196-8bd6-1eb64bced91d.gif)
 
