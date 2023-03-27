@@ -1,9 +1,12 @@
+#requires -PSEdition Desktop
+
 # Set API URL
 $apiUrl = "https://api.github.com/repos/praydog/REFramework/actions/artifacts?per_page=100"
 # Personal Access Token for GitHub API authentication
-# Replace below with your own token, which can be generated at https://github.com/settings/tokens (Generate new token > Personal access tokens (classic))
+# Replace *** with your own token, which can be generated at https://github.com/settings/tokens (Generate new token > Personal access tokens (classic))
 # It should be granted the "repo" scope (public_repo, repo:status, repo_deployment) for downloading artifacts from public repositories
 $personalAccessToken = "****************************************"
+
 # Headers
 $headers = @{
     "Authorization" = "Bearer $personalAccessToken"
@@ -213,7 +216,7 @@ else {
 }
 
 # Determine the zip file path for the new commit hash
-$timestamp = $latestArtifact.updated_at.toString("yyyyMMdd")
+$timestamp = (Get-Date -Date $latestArtifact.updated_at).ToString("yyyyMMdd")
 $commitHash = $latestArtifact.workflow_run.head_sha.substring(0, 7)
 $zipFile = ".reframework_$($latestArtifact.name)_$($latestArtifact.workflow_run.head_branch)_$($timestamp)_$($commitHash).zip"
 if ($zipFile) {
