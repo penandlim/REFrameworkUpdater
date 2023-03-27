@@ -134,9 +134,6 @@ function CheckAndUpdate($previousCommitHash, $commitHash) {
             $innerZipFile = "$($artifactName).zip"
             Write-Host "Extracting $innerZipFile..."
             Expand-Archive -LiteralPath "$($ENV:Temp)/reframeworkUpdater/$innerZipFile" -DestinationPath "$($ENV:Temp)/reframeworkUpdater/" -Force -Verbose:$true
-            # Copy the "dinput8.dll" file to the game directory
-            Write-Host "Copying dinput8.dll to the game directory..."
-            Copy-Item -Path "$($ENV:Temp)/reframeworkUpdater/dinput8.dll" -Destination . -Force
 
             # Select files and folders to copy
             $innerZipPath = "$($ENV:Temp)/reframeworkUpdater/"
