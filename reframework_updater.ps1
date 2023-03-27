@@ -1,12 +1,20 @@
 # Set API URL
 $apiUrl = "https://api.github.com/repos/praydog/REFramework/actions/artifacts?per_page=100"
+# Personal Access Token for GitHub API authentication
+# Replace below with your own token, which can be generated at https://github.com/settings/tokens (Generate new token > Personal access tokens (classic))
+# It should be granted the "repo" scope (public_repo, repo:status, repo_deployment) for downloading artifacts from public repositories
+$personalAccessToken = "****************************************"
+# Headers
+$headers = @{
+    "Authorization" = "Bearer $personalAccessToken"
+}
 
 
-# Function to download a file
+# Function to download a file from a given URL and save it to the specified output path
 function Download-File($url, $output) {
     try {
         Write-Host "Downloading file from $url..."
-        Invoke-WebRequest -Uri $url -OutFile $output
+        Invoke-WebRequest -Uri $url -OutFile $output -Headers $headers
         Write-Host "Download successful!"
     }
     catch {
@@ -15,7 +23,7 @@ function Download-File($url, $output) {
     }
 }
 
-# Function to get user selection.
+# Function to let the user select a game from the grouped artifacts
 function Select-Game($artifacts) {
     $selectedIndex = 0
     $groupedArtifacts = $artifacts | Sort-Object -Property @{Expression = "workflow_run.head_branch"; Ascending = $true }, @{Expression = "name"; Ascending = $true } | Group-Object -Property { $_.name + "#" + $_.workflow_run.head_branch }
@@ -48,12 +56,117 @@ function Select-Game($artifacts) {
     return $groupedArtifacts[$selectedIndex]
 }
 
+# Function to let the user select files and folders from a list of items
+function Select-FilesAndFolders($items) {
+    $selectedIndex = 0
+    $selectedItems = @()
+    
+    while ($true) {
+        Clear-Host
+        Write-Host "Select files or folders to copy and overwrite (use arrow keys to navigate, space to select, and enter to confirm):" -ForegroundColor Cyan
+        Write-Host "(Recommneded for DLSS Upscalar setup: dinput8.dll only)" -ForegroundColor Cyan
+        
+        for ($i = 0; $i -lt $items.Count; $i++) {
+            $item = $items[$i]
+            $isSelected = $selectedItems.Contains($i)
+            
+            if ($i -eq $selectedIndex) {
+                if ($isSelected) {
+                    Write-Host ">* $($item.Name)" -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host ">  $($item.Name)"
+                }
+            }
+            else {
+                if ($isSelected) {
+                    Write-Host " * $($item.Name)" -ForegroundColor Yellow
+                }
+                else {
+                    Write-Host "   $($item.Name)"
+                }
+            }
+        }
+        
+        $key = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode
+        switch ($key) {
+            40 { $selectedIndex++; if ($selectedIndex -ge $items.Count) { $selectedIndex = 0 } } # Down arrow
+            38 { $selectedIndex--; if ($selectedIndex -lt 0) { $selectedIndex = $items.Count - 1 } } # Up arrow
+            32 {
+                # Space
+                if ($selectedItems.Contains($selectedIndex)) {
+                    $selectedItems = $selectedItems | Where-Object { $_ -ne $selectedIndex }
+                }
+                else {
+                    $selectedItems += $selectedIndex
+                }
+            }
+            13 { return $items[$selectedItems] } # Enter
+        }
+    }
+}
 
+
+# Function to check for updates and perform the update if necessary
+function CheckAndUpdate($previousCommitHash, $commitHash) {
+    # Compare commit hash
+    if ($previousCommitHash -eq $commitHash) {
+        # If the zip file exists, don't update
+        Write-Host "No updates required. If you think this is an error, remove any zip files starting with .reframework" -ForegroundColor Green
+    }
+    else {
+        # Else, download the file
+        Write-Host "New version detected. Updating..." -ForegroundColor Yellow
+        # Remove any previously downloaded .reframework zip files
+        Get-ChildItem -Path . -Include .reframework*.zip | Remove-Item -Force
+        Download-File -url $latestArtifact.archive_download_url -output $zipFile
+
+        try {
+            # Extract outer zip file
+            Write-Host "Extracting $zipFile..."
+            Expand-Archive -Path $zipFile -DestinationPath "$($ENV:Temp)/reframeworkUpdater/" -Force -Verbose:$true
+
+            # Extract inner zip file
+            # Assumes the inner zip file matches the artifact name
+            $innerZipFile = "$($artifactName).zip"
+            Write-Host "Extracting $innerZipFile..."
+            Expand-Archive -LiteralPath "$($ENV:Temp)/reframeworkUpdater/$innerZipFile" -DestinationPath "$($ENV:Temp)/reframeworkUpdater/" -Force -Verbose:$true
+            # Copy the "dinput8.dll" file to the game directory
+            Write-Host "Copying dinput8.dll to the game directory..."
+            Copy-Item -Path "$($ENV:Temp)/reframeworkUpdater/dinput8.dll" -Destination . -Force
+
+            # Select files and folders to copy
+            $innerZipPath = "$($ENV:Temp)/reframeworkUpdater/"
+            $items = Get-ChildItem -Path $innerZipPath | Where-Object { $_.Name -ne $innerZipFile }
+            $selectedItems = Select-FilesAndFolders -items $items
+
+            if ($selectedItems.Count -gt 0) {
+                Write-Host "Copying selected files and folders to the game directory..."
+                foreach ($item in $selectedItems) {
+                    $sourcePath = Join-Path -Path $innerZipPath -ChildPath $item.Name
+                    $destinationPath = Join-Path -Path (Get-Location) -ChildPath $item.Name
+                    if ($item -is [System.IO.DirectoryInfo]) {
+                        Copy-Item -Path $sourcePath -Destination $destinationPath -Recurse -Force -Verbose
+                    }
+                    else {
+                        Copy-Item -Path $sourcePath -Destination $destinationPath -Force -Verbose
+                    }
+                }
+            }
+
+            Write-Host "Update successful!" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "Error: Failed to extract and update the files." -ForegroundColor Red
+            exit 1
+        }
+    }
+}
 
 # Get latest artifact
 try {
     Write-Host "Fetching artifacts from GitHub API..."
-    $response = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing
+    $response = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -Headers $headers
     $artifacts = ($response | ConvertFrom-Json).artifacts
     $artifacts = $artifacts | ForEach-Object {
         $artifact = $_
@@ -100,36 +213,17 @@ else {
 }
 
 # Determine the zip file path for the new commit hash
-$timestamp = $latestArtifact.updated_at.Split("T")[0].Replace("-", "")
+$timestamp = $latestArtifact.updated_at.toString("yyyyMMdd")
 $commitHash = $latestArtifact.workflow_run.head_sha.substring(0, 7)
 $zipFile = ".reframework_$($latestArtifact.name)_$($latestArtifact.workflow_run.head_branch)_$($timestamp)_$($commitHash).zip"
 if ($zipFile) {
     $currentArtifactNameAndBranch = $zipFile.Split("_")[1..2] -join "#"
     $commitHash = $zipFile.Split("_")[4].Replace(".zip", "")
-    Write-Host "The latest version is from $currentArtifactNameAndBranch with commit hash $commitHash." -ForegroundColor Yellow
+    Write-Host "The latest version is from $currentArtifactNameAndBranch with commit hash $commitHash released on $timestamp." -ForegroundColor Yellow
 }
 
-# Compare commit hash
-if ($previousCommitHash -eq $commitHash) {
-    # If the zip file exists, don't update
-    Write-Host "No updates required. If you think this is an error, remove any zip files starting with .reframework" -ForegroundColor Green
-}
-else {
-    # Else, download the file
-    Write-Host "New version detected. Updating..." -ForegroundColor Yellow
-    # Remove any previously downloaded .reframework zip files
-    Get-ChildItem -Path . -Include .reframework*.zip | Remove-Item -Force
-    Download-File -url $latestArtifact.archive_download_url -output $zipFile
-
-    try {
-        Expand-Archive -Path $zipFile -DestinationPath . -Force
-        Write-Host "Update successful!" -ForegroundColor Green
-    }
-    catch {
-        Write-Host "Error: Failed to extract and update the files." -ForegroundColor Red
-        exit 1
-    }
-}
+# Check for updates
+CheckAndUpdate -previousCommitHash $previousCommitHash -commitHash $commitHash
 
 # Wait for user input before closing
 Write-Host "Press any key to exit..." -ForegroundColor White
