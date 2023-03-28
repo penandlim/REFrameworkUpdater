@@ -120,8 +120,6 @@ function CheckAndUpdate($previousCommitHash, $commitHash) {
     else {
         # Else, download the file
         Write-Host "New version detected. Updating..." -ForegroundColor Yellow
-        # Remove any previously downloaded .reframework zip files
-        Get-ChildItem -Path . -Include .reframework*.zip | Remove-Item -Force
         Download-File -url $latestArtifact.archive_download_url -output $zipFile
 
         try {
