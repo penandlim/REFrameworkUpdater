@@ -4,8 +4,7 @@ $apiUrl = "$repoUrl/actions/artifacts?per_page=100"
 # Personal Access Token for GitHub API authentication
 # Replace *** with your own token, which can be generated at https://github.com/settings/tokens (Generate new token > Personal access tokens (classic))
 # It should be granted the "repo" scope (public_repo, repo:status, repo_deployment) for downloading artifacts from public repositories
-#$personalAccessToken = "****************************************"
-$personalAccessToken = "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"
+$personalAccessToken = "****************************************"
 # Headers
 $headers = @{
     "Authorization" = "Bearer $personalAccessToken"
