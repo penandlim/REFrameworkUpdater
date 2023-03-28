@@ -1,7 +1,14 @@
 # REFrameworkUpdater
 PowerShell script for updating DLLs from [@praydog's REFramework](https://github.com/praydog/REFramework) nightly builds
 
+
+* First run
+
 ![Preview](https://user-images.githubusercontent.com/4276174/227882218-18a3e9ed-c030-4196-8bd6-1eb64bced91d.gif)
+* Updating
+
+![Animation3](https://user-images.githubusercontent.com/4276174/228385076-c38d3243-62c3-47a5-9807-73e80bef0ee5.gif)
+
 
 ## Pre-requisites
 Generate a personal github token for public repo artifacts API access
