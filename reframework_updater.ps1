@@ -1,17 +1,29 @@
-#requires -PSEdition Desktop
-
 # Set API URL
-$apiUrl = "https://api.github.com/repos/praydog/REFramework/actions/artifacts?per_page=100"
+$repoUrl = "https://api.github.com/repos/praydog/REFramework"
+$apiUrl = "$repoUrl/actions/artifacts?per_page=100"
 # Personal Access Token for GitHub API authentication
 # Replace *** with your own token, which can be generated at https://github.com/settings/tokens (Generate new token > Personal access tokens (classic))
 # It should be granted the "repo" scope (public_repo, repo:status, repo_deployment) for downloading artifacts from public repositories
-$personalAccessToken = "****************************************"
-
+#$personalAccessToken = "****************************************"
+$personalAccessToken = "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"
 # Headers
 $headers = @{
     "Authorization" = "Bearer $personalAccessToken"
 }
 
+# Function to fetch the changelog between two commits
+function Get-Changelog($base, $head) {
+    try {
+        $changelogApiUrl = "$repoUrl/compare/$base...$head"
+        $changelogResponse = Invoke-WebRequest -Uri $changelogApiUrl -UseBasicParsing -Headers $headers
+        $commits = ($changelogResponse | ConvertFrom-Json).commits
+    }
+    catch {
+        Write-Host "Error: Failed to fetch the changelog from GitHub." -ForegroundColor Red
+        exit 1
+    }
+    return $commits
+}
 
 # Function to download a file from a given URL and save it to the specified output path
 function Download-File($url, $output) {
@@ -120,6 +132,8 @@ function CheckAndUpdate($previousCommitHash, $commitHash) {
     else {
         # Else, download the file
         Write-Host "New version detected. Updating..." -ForegroundColor Yellow
+        # Remove any previously downloaded .reframework zip files
+        Get-ChildItem -Path . -Include .reframework*.zip | Remove-Item -Force
         Download-File -url $latestArtifact.archive_download_url -output $zipFile
 
         try {
@@ -218,6 +232,31 @@ if ($zipFile) {
     $currentArtifactNameAndBranch = $zipFile.Split("_")[1..2] -join "#"
     $commitHash = $zipFile.Split("_")[4].Replace(".zip", "")
     Write-Host "The latest version is from $currentArtifactNameAndBranch with commit hash $commitHash released on $timestamp." -ForegroundColor Yellow
+}
+
+# Fetch and display changelog
+if ($previousCommitHash -and $previousCommitHash -ne "") {
+    if ($previousCommitHash -ne $commitHash) {
+        Write-Host "Fetching changelog between commits $previousCommitHash and $commitHash..." -ForegroundColor Cyan
+        $changelog = Get-Changelog -base $previousCommitHash -head $commitHash
+        if ($changelog.Count -gt 0) {
+            Write-Host "Changelog:" -ForegroundColor Green
+            foreach ($commit in $changelog) {
+                Write-Host "  - $($commit.commit.message) (Commit: $($commit.sha.substring(0, 7)), Author: $($commit.commit.author.name), Date: $($commit.commit.author.date))"
+            }
+        }
+        else {
+            Write-Host "No changes found between commits $previousCommitHash and $commitHash" -ForegroundColor Yellow
+        }
+        Write-Host "Press any key to continue..." -ForegroundColor White
+        $null = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    }
+    else {
+        Write-Host "No updates found, the local version is up to date with commit $previousCommitHash." -ForegroundColor Green
+    }
+}
+else {
+    Write-Host "No local version found, skipping changelog." -ForegroundColor Red
 }
 
 # Check for updates
